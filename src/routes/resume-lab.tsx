@@ -16,12 +16,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDashboardStore, dashboardActions } from "@/store/dashboardStore";
 import { useOnboardingStore }                  from "@/store/onboardingStore";
 
-import { parseResumeFile, validateResumeFile, formatFileSize } from "@/services/resumeParser";
-import { parseResume }    from "@/services/resume/parser";
-import { cleanResumeText } from "@/services/resume/cleaner";
-import { calculateATS, getScoreGrade, getScoreColour, getScoreBgColour } from "@/services/ats/scoringEngine";
-import type { ATSResult } from "@/services/ats/scoringEngine";
-import type { ParsedResume } from "@/services/resume/parser";
+import { validateResumeFile, formatFileSize } from "@/services/resumeParser";
+import { parsePDF } from "@/services/resume/parser/pdfParser";
+import { parseDOCX } from "@/services/resume/parser/docxParser";
+import { sanitizeResumeText } from "@/services/resume/parser/sanitize";
+import { extractContactInfo } from "@/services/resume/extractors/contactExtractor";
+import { extractSkills } from "@/services/resume/extractors/skillsExtractor";
+import { extractExperience } from "@/services/resume/extractors/experienceExtractor";
+import { extractEducation } from "@/services/resume/extractors/educationExtractor";
+import { extractCertifications } from "@/services/resume/extractors/certificationExtractor";
+import { extractProjects } from "@/services/resume/extractors/projectsExtractor";
+import { calculateATSScore } from "@/services/resume/ats/atsEngine";
+import { ROLES } from "@/services/resume/roles/roles";
+import type { ParsedResume, ATSResult } from "@/services/resume/types/resume.types";
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
@@ -162,35 +169,52 @@ function UploadZone({ onResult }: UploadZoneProps) {
 
     try {
       // ── Extract raw text ──────────────────────────────────────────────
-      const parseResult = await parseResumeFile(file);
-      if (!parseResult.success || !parseResult.data) {
-        throw new Error(parseResult.error ?? "Could not extract text from file");
+      let rawText = "";
+      const extension = file.name.split(".").pop()?.toLowerCase();
+
+      if (extension === "pdf") {
+        rawText = await parsePDF(file);
+      } else if (extension === "docx") {
+        rawText = await parseDOCX(file);
+      } else if (extension === "txt") {
+        rawText = await file.text();
+      } else {
+        throw new Error("Unsupported file type. Please use PDF, DOCX, or TXT.");
       }
+
       setProgress(45);
       setStage("parsing");
 
       // ── Clean the raw text ────────────────────────────────────────────
-      const cleanText = cleanResumeText(parseResult.data.rawText);
+      const cleanText = sanitizeResumeText(rawText);
 
       // ── Structured parse (new engine) ─────────────────────────────────
-      const parsed = parseResume(cleanText);
+      const personalInfo = extractContactInfo(cleanText);
+      const skills = extractSkills(cleanText);
+      const experience = extractExperience(cleanText);
+      const education = extractEducation(cleanText);
+      const certifications = extractCertifications(cleanText);
+      const projects = extractProjects(cleanText);
+
+      const parsed: ParsedResume = {
+        personalInfo,
+        skills,
+        experience,
+        education,
+        certifications,
+        projects,
+        rawText,
+        sanitizedText: cleanText
+      };
+
       setProgress(70);
       setStage("scoring");
 
       // ── ATS score ─────────────────────────────────────────────────────
-      // Prefer onboarding store (new system); fall back to dashboard store
-      const atsProfile = {
-        targetRole:      profile.targetRole      || onboarding?.targetRole      || "",
-        industry:        profile.industry        || onboarding?.industry        || "",
-        experienceLevel: profile.experienceLevel || onboarding?.experienceLevel || "",
-        skills:          profile.skills?.length  ? profile.skills : (onboarding?.skills ?? []),
-        linkedinUrl:     profile.linkedinUrl     || onboarding?.linkedinUrl,
-      };
+      const targetTitle = profile.targetRole || onboarding?.targetRole || "";
+      const targetRole = ROLES.find(r => r.title === targetTitle) || ROLES[0];
 
-      const atsResult = calculateATS({
-        resumeText:        cleanText,
-        onboardingProfile: atsProfile,
-      });
+      const atsResult = calculateATSScore(parsed, targetRole);
       setProgress(90);
 
       // ── Persist to dashboard store ────────────────────────────────────
@@ -199,14 +223,14 @@ function UploadZone({ onResult }: UploadZoneProps) {
         fileName:      file.name,
         fileSize:      file.size,
         uploadedAt:    new Date().toISOString(),
-        extractedText: parseResult.data.rawText,
-        parsedData:    parseResult.data,
+        extractedText: rawText,
+        parsedData:    parsed as any,
         atsScore:      atsResult.score,
-        feedback:      atsResult.suggestions.map((msg, i) => ({
+        feedback:      atsResult.recommendations.map(r => ({
           type:     "recommendation" as const,
-          category: "content"        as const,
-          message:  msg,
-          priority: i < 3 ? "high" as const : "medium" as const,
+          category: r.category as any,
+          message:  r.message,
+          priority: r.priority,
         })),
       }));
 
@@ -284,10 +308,24 @@ function UploadZone({ onResult }: UploadZoneProps) {
 
 // ─── Analysis panels ──────────────────────────────────────────────────────────
 
+function getScoreColour(score: number): string {
+  if (score >= 80) return "text-green-600";
+  if (score >= 60) return "text-blue-600";
+  if (score >= 40) return "text-amber-500";
+  return "text-red-600";
+}
+
+function getScoreBgColour(score: number): string {
+  if (score >= 80) return "bg-green-100";
+  if (score >= 60) return "bg-blue-100";
+  if (score >= 40) return "bg-amber-100";
+  return "bg-red-100";
+}
+
 function ScoreOverview({ ats, fileName, fileSize, onReset }: {
   ats: ATSResult; fileName: string; fileSize: number; onReset: () => void;
 }) {
-  const grade  = getScoreGrade(ats.score);
+  const grade  = ats.grade;
   const colour = getScoreColour(ats.score);
   const bg     = getScoreBgColour(ats.score);
 
@@ -309,6 +347,7 @@ function ScoreOverview({ ats, fileName, fileSize, onReset }: {
             <div className="flex items-center justify-center sm:justify-start gap-2">
               <span className={`text-xl font-bold ${colour}`}>{grade}</span>
               <Badge className={`${bg} ${colour} border-0`}>{grade}</Badge>
+              <Badge variant="outline" className="ml-2 border-primary/30 text-primary">Role Match: {ats.roleMatchPercentage}%</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
               {grade === "Excellent" && "Your resume is well-optimised for ATS systems."}
@@ -343,11 +382,13 @@ function BreakdownPanel({ ats }: { ats: ATSResult }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        <ComponentBar {...breakdown.keywordMatch}  label={breakdown.keywordMatch.label}  />
-        <ComponentBar {...breakdown.semanticMatch} label={breakdown.semanticMatch.label} />
-        <ComponentBar {...breakdown.experienceFit} label={breakdown.experienceFit.label} />
-        <ComponentBar {...breakdown.resumeQuality} label={breakdown.resumeQuality.label} />
-        <ComponentBar {...breakdown.jobAlignment}  label={breakdown.jobAlignment.label}  />
+        <ComponentBar {...breakdown.contactCompleteness} label={breakdown.contactCompleteness.label} />
+        <ComponentBar {...breakdown.skillsRelevance} label={breakdown.skillsRelevance.label} />
+        <ComponentBar {...breakdown.experienceQuality} label={breakdown.experienceQuality.label} />
+        <ComponentBar {...breakdown.projectsQuality} label={breakdown.projectsQuality.label} />
+        <ComponentBar {...breakdown.formatting} label={breakdown.formatting.label} />
+        <ComponentBar {...breakdown.certifications} label={breakdown.certifications.label} />
+        <ComponentBar {...breakdown.keywordMatch} label={breakdown.keywordMatch.label} />
       </CardContent>
     </Card>
   );
@@ -431,23 +472,47 @@ function SuggestionsPanel({ ats }: { ats: ATSResult }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Lightbulb className="w-4 h-4" />
-          Actionable Fixes
+          Actionable Fixes & Interview Prep
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {ats.suggestions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No suggestions — your resume looks great.</p>
-        ) : (
-          ats.suggestions.map((s, i) => (
-            <div key={i} className={`flex gap-3 rounded-lg p-3 text-sm ${
-              i < 3 ? "bg-red-50 border border-red-100" : "bg-amber-50 border border-amber-100"
-            }`}>
-              <span className={`shrink-0 font-bold text-xs mt-0.5 ${i < 3 ? "text-red-600" : "text-amber-600"}`}>
-                {i < 3 ? "HIGH" : "MED"}
-              </span>
-              <p className="text-foreground leading-relaxed">{s}</p>
+      <CardContent className="space-y-6">
+        <div className="space-y-3">
+          <p className="text-sm font-semibold">Recommendations</p>
+          {ats.recommendations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recommendations — your resume looks great.</p>
+          ) : (
+            ats.recommendations.map((r, i) => (
+              <div key={r.id} className={`flex gap-3 rounded-lg p-3 text-sm ${
+                r.priority === "high" ? "bg-red-50 border border-red-100" :
+                r.priority === "medium" ? "bg-amber-50 border border-amber-100" : "bg-blue-50 border border-blue-100"
+              }`}>
+                <span className={`shrink-0 font-bold text-xs mt-0.5 ${
+                  r.priority === "high" ? "text-red-600" :
+                  r.priority === "medium" ? "text-amber-600" : "text-blue-600"
+                }`}>
+                  {r.priority.toUpperCase()}
+                </span>
+                <p className="text-foreground leading-relaxed">{r.message}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {ats.interviewTopics.length > 0 && (
+          <div className="space-y-3 border-t pt-4">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" />
+              Targeted Interview Topics
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ats.interviewTopics.map((topic, i) => (
+                <Badge key={i} variant="secondary" className="bg-primary/5 text-primary border-primary/20">
+                  {topic}
+                </Badge>
+              ))}
             </div>
-          ))
+            <p className="text-xs text-muted-foreground">Brush up on these topics based on your target role.</p>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -468,10 +533,10 @@ function ParsedDataPanel({ parsed }: { parsed: ParsedResume }) {
         <div>
           <p className="font-medium mb-2">Contact Info</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-            <span>Name</span>      <span className="text-foreground">{parsed.name      ?? "—"}</span>
-            <span>Email</span>     <span className="text-foreground">{parsed.email     ?? "—"}</span>
-            <span>Phone</span>     <span className="text-foreground">{parsed.phone     ?? "—"}</span>
-            <span>LinkedIn</span>  <span className="text-foreground truncate">{parsed.linkedin ?? "—"}</span>
+            <span>Name</span>      <span className="text-foreground">{parsed.personalInfo.name      ?? "—"}</span>
+            <span>Email</span>     <span className="text-foreground">{parsed.personalInfo.email     ?? "—"}</span>
+            <span>Phone</span>     <span className="text-foreground">{parsed.personalInfo.phone     ?? "—"}</span>
+            <span>LinkedIn</span>  <span className="text-foreground truncate">{parsed.personalInfo.linkedin ?? "—"}</span>
           </div>
         </div>
 
@@ -568,7 +633,10 @@ function ParsedDataPanel({ parsed }: { parsed: ParsedResume }) {
 
 // ─── Debug panel (dev only) ───────────────────────────────────────────────────
 
-function DebugPanel({ onLoad }: { onLoad: (text: string) => void }) {
+function DebugPanel({ onLoad, result }: {
+  onLoad: (text: string) => void;
+  result?: { parsed: ParsedResume; ats: ATSResult };
+}) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
 
@@ -584,41 +652,67 @@ function DebugPanel({ onLoad }: { onLoad: (text: string) => void }) {
       </button>
 
       {open && (
-        <div className="space-y-3">
-          <p className="text-xs text-amber-700">
-            Test the parser and ATS engine without uploading a file.
-            The sample resume below is pre-loaded with a Software Engineer profile.
-          </p>
+        <div className="space-y-4">
+          <div className="space-y-3">
+            <p className="text-xs text-amber-700">
+              Test the parser and ATS engine without uploading a file.
+              The sample resume below is pre-loaded with a Software Engineer profile.
+            </p>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-amber-400 text-amber-800 hover:bg-amber-100"
-            onClick={() => onLoad(DEBUG_RESUME)}
-          >
-            <Zap className="w-3.5 h-3.5 mr-2" />
-            Run sample resume
-          </Button>
-
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-amber-700">Or paste your own resume text:</p>
-            <textarea
-              value={custom}
-              onChange={(e) => setCustom(e.target.value)}
-              rows={6}
-              placeholder="Paste raw resume text here…"
-              className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-mono text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
             <Button
               size="sm"
               variant="outline"
-              disabled={!custom.trim()}
               className="border-amber-400 text-amber-800 hover:bg-amber-100"
-              onClick={() => { if (custom.trim()) onLoad(custom); }}
+              onClick={() => onLoad(DEBUG_RESUME)}
             >
-              Analyse pasted text
+              <Zap className="w-3.5 h-3.5 mr-2" />
+              Run sample resume
             </Button>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-amber-700">Or paste your own resume text:</p>
+              <textarea
+                value={custom}
+                onChange={(e) => setCustom(e.target.value)}
+                rows={6}
+                placeholder="Paste raw resume text here…"
+                className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-mono text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!custom.trim()}
+                className="border-amber-400 text-amber-800 hover:bg-amber-100"
+                onClick={() => { if (custom.trim()) onLoad(custom); }}
+              >
+                Analyse pasted text
+              </Button>
+            </div>
           </div>
+
+          {result && (
+            <div className="pt-4 border-t border-amber-200 space-y-3">
+              <p className="text-xs font-bold text-amber-800 uppercase">Engine Metadata</p>
+              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-amber-700">
+                <div className="bg-white p-2 rounded border border-amber-200">
+                  <p className="font-bold mb-1">Text Stats</p>
+                  <p>Raw: {result.parsed.rawText.length} chars</p>
+                  <p>Clean: {result.parsed.sanitizedText.length} chars</p>
+                </div>
+                <div className="bg-white p-2 rounded border border-amber-200">
+                  <p className="font-bold mb-1">Extraction</p>
+                  <p>Skills: {result.parsed.skills.length}</p>
+                  <p>Exp: {result.parsed.experience.length} blocks</p>
+                </div>
+                <div className="col-span-2 bg-white p-2 rounded border border-amber-200">
+                  <p className="font-bold mb-1">ATS Breakdown</p>
+                  <pre className="whitespace-pre-wrap">
+                    {JSON.stringify(result.ats.breakdown, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -662,17 +756,30 @@ function ResumeLabPage() {
 
   // Debug: run analysis directly on raw text (no file upload)
   const handleDebugText = useCallback((text: string) => {
-    const cleanText = cleanResumeText(text);
+    const cleanText = sanitizeResumeText(text);
 
-    const atsProfile = {
-      targetRole:      profile.targetRole      || onboarding?.targetRole      || "",
-      industry:        profile.industry        || onboarding?.industry        || "",
-      experienceLevel: profile.experienceLevel || onboarding?.experienceLevel || "",
-      skills:          profile.skills?.length  ? profile.skills : (onboarding?.skills ?? []),
-      linkedinUrl:     profile.linkedinUrl     || onboarding?.linkedinUrl,
+    const personalInfo = extractContactInfo(cleanText);
+    const skills = extractSkills(cleanText);
+    const experience = extractExperience(cleanText);
+    const education = extractEducation(cleanText);
+    const certifications = extractCertifications(cleanText);
+    const projects = extractProjects(cleanText);
+
+    const parsed: ParsedResume = {
+      personalInfo,
+      skills,
+      experience,
+      education,
+      certifications,
+      projects,
+      rawText: text,
+      sanitizedText: cleanText
     };
-    const parsed = parseResume(cleanText);
-    const ats    = calculateATS({ resumeText: cleanText, onboardingProfile: atsProfile });
+
+    const targetTitle = profile.targetRole || onboarding?.targetRole || "";
+    const targetRole = ROLES.find(r => r.title === targetTitle) || ROLES[0];
+
+    const ats = calculateATSScore(parsed, targetRole);
     setResult({ parsed, ats, fileName: "debug-input.txt", fileSize: text.length });
   }, [profile, onboarding]);
 
@@ -779,7 +886,7 @@ function ResumeLabPage() {
 
             {/* Debug panel also available after results in dev */}
             {isDev && (
-              <DebugPanel onLoad={handleDebugText} />
+              <DebugPanel onLoad={handleDebugText} result={result} />
             )}
           </div>
         )}
