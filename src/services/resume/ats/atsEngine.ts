@@ -2,66 +2,69 @@ import { ParsedResume, ATSResult, Role } from "../types/resume.types";
 import { analyzeKeywords } from "./keywordEngine";
 import { analyzeFormatting } from "./formatEngine";
 import { generateRecommendations } from "./recommendationEngine";
+import { calculateReadabilityScore } from "../utils/textMetrics";
 
 /**
  * Main ATS scoring engine.
  */
 export function calculateATSScore(parsed: ParsedResume, targetRole?: Role): ATSResult {
-  // Weights:
-  // Contact completeness → 10
-  // Skills relevance → 25
-  // Experience quality → 20
-  // Projects quality → 15
-  // ATS formatting → 10
-  // Certifications → 10
-  // Keyword match → 10
+  /**
+   * Weights:
+   * Contact Completeness → 10
+   * Role Keyword Match → 20
+   * Skills Match → 20
+   * Experience Quality → 15
+   * Projects Quality → 10
+   * Formatting Quality → 10
+   * Achievements & Metrics → 5
+   * Certifications → 5
+   * Readability → 5
+   */
 
-  // 1. Contact Completeness (10)
-  const contactFields = ["name", "email", "phone", "linkedin"];
+  // 1. Contact (10)
+  const contactFields = ["name", "email", "phone", "linkedin", "github"];
   const presentFields = contactFields.filter(f => !!(parsed.personalInfo as any)[f]);
   const contactScore = (presentFields.length / contactFields.length) * 10;
 
-  // 2. Skills Relevance (25)
-  // Higher score if they have more skills from the target role
-  let skillsScore = 0;
+  // 2. Keyword Match (20)
+  const keywordAnalysis = analyzeKeywords(parsed.sanitizedText, targetRole?.keywords || []);
+  const keywordScore = (keywordAnalysis.percentage / 100) * 20;
+
+  // 3. Skills Match (20)
+  let skillsMatchScore = 0;
   if (targetRole) {
     const matchedSkills = parsed.skills.filter(s =>
       targetRole.preferredSkills.some(ps => ps.toLowerCase() === s.toLowerCase())
     );
-    skillsScore = (matchedSkills.length / Math.max(targetRole.preferredSkills.length, 1)) * 25;
+    skillsMatchScore = (matchedSkills.length / Math.max(targetRole.preferredSkills.length, 1)) * 20;
   } else {
-    skillsScore = Math.min((parsed.skills.length / 10) * 25, 25);
+    skillsMatchScore = Math.min((parsed.skills.length / 10) * 20, 20);
   }
 
-  // 3. Experience Quality (20)
-  // Based on number of achievements, metrics, and action verbs
-  const totalAch = parsed.experience.reduce((sum, exp) => sum + exp.achievements.length, 0);
-  const totalMetrics = parsed.experience.reduce((sum, exp) => sum + exp.metricsFound, 0);
-  const totalVerbs = parsed.experience.reduce((sum, exp) => sum + exp.actionVerbsFound, 0);
+  // 4. Experience Quality (15)
+  const expScore = Math.min((parsed.experience.length / 3) * 15, 15);
 
-  let expScore = 0;
-  if (parsed.experience.length > 0) {
-    expScore += Math.min((totalAch / 5) * 10, 10);
-    expScore += Math.min((totalMetrics / 3) * 5, 5);
-    expScore += Math.min((totalVerbs / 3) * 5, 5);
-  }
+  // 5. Projects Quality (10)
+  const projectScore = Math.min((parsed.projects.length / 2) * 10, 10);
 
-  // 4. Projects Quality (15)
-  const projectScore = Math.min((parsed.projects.length / 2) * 15, 15);
-
-  // 5. ATS Formatting (10)
+  // 6. Formatting (10)
   const formatAnalysis = analyzeFormatting(parsed);
   const formatScore = (formatAnalysis.score / 100) * 10;
 
-  // 6. Certifications (10)
-  const certScore = Math.min((parsed.certifications.length / 2) * 10, 10);
+  // 7. Achievements & Metrics (5)
+  const totalMetrics = parsed.experience.reduce((sum, exp) => sum + exp.metricsFound, 0);
+  const metricsScore = Math.min((totalMetrics / 5) * 5, 5);
 
-  // 7. Keyword Match (10)
-  const keywordAnalysis = analyzeKeywords(parsed.sanitizedText, targetRole?.keywords || []);
-  const keywordScore = (keywordAnalysis.percentage / 100) * 10;
+  // 8. Certifications (5)
+  const certScore = Math.min((parsed.certifications.length / 2) * 5, 5);
+
+  // 9. Readability (5)
+  const readabilityValue = calculateReadabilityScore(parsed.sanitizedText);
+  // Target Flesch score around 60 (Standard/Professional)
+  const readabilityScore = Math.max(0, Math.min(5, (readabilityValue / 60) * 5));
 
   const totalScore = Math.round(
-    contactScore + skillsScore + expScore + projectScore + formatScore + certScore + keywordScore
+    contactScore + keywordScore + skillsMatchScore + expScore + projectScore + formatScore + metricsScore + certScore + readabilityScore
   );
 
   const finalScore = Math.min(totalScore, 100);
@@ -76,17 +79,18 @@ export function calculateATSScore(parsed: ParsedResume, targetRole?: Role): ATSR
     grade,
     breakdown: {
       contactCompleteness: { score: Math.round(contactScore), max: 10, label: "Contact Info", detail: `${presentFields.length}/${contactFields.length} fields found` },
-      skillsRelevance: { score: Math.round(skillsScore), max: 25, label: "Skills", detail: "Matching against role skills" },
-      experienceQuality: { score: Math.round(expScore), max: 20, label: "Experience", detail: "Based on achievements and metrics" },
-      projectsQuality: { score: Math.round(projectScore), max: 15, label: "Projects", detail: `${parsed.projects.length} projects found` },
+      skillsRelevance: { score: Math.round(skillsMatchScore), max: 20, label: "Skills", detail: "Matching against role skills" },
+      experienceQuality: { score: Math.round(expScore), max: 15, label: "Experience", detail: `${parsed.experience.length} roles detected` },
+      projectsQuality: { score: Math.round(projectScore), max: 10, label: "Projects", detail: `${parsed.projects.length} projects found` },
       formatting: { score: Math.round(formatScore), max: 10, label: "Formatting", detail: formatAnalysis.issues[0] || "No major formatting issues" },
-      certifications: { score: Math.round(certScore), max: 10, label: "Certifications", detail: `${parsed.certifications.length} certifications found` },
-      keywordMatch: { score: Math.round(keywordScore), max: 10, label: "Keywords", detail: `${keywordAnalysis.matched.length} keywords matched` },
+      readability: { score: Math.round(readabilityScore), max: 5, label: "Readability", detail: `Flesch Score: ${Math.round(readabilityValue)}` },
+      certifications: { score: Math.round(certScore), max: 5, label: "Certifications", detail: `${parsed.certifications.length} certifications found` },
+      keywordMatch: { score: Math.round(keywordScore), max: 20, label: "Keywords", detail: `${keywordAnalysis.matched.length} keywords matched` },
     },
     matchedKeywords: keywordAnalysis.matched,
     missingKeywords: keywordAnalysis.missing,
     recommendations: generateRecommendations(parsed, finalScore, keywordAnalysis.missing, targetRole),
-    roleMatchPercentage: Math.round((skillsScore / 25) * 100),
+    roleMatchPercentage: Math.round(((keywordScore + skillsMatchScore) / 40) * 100),
     interviewTopics: targetRole?.interviewTopics || []
   };
 }

@@ -7,7 +7,9 @@ export const ROLES: Role[] = [
     keywords: ["React", "TypeScript", "Tailwind", "Next.js", "Redux", "GraphQL", "Web Performance", "Accessibility"],
     preferredSkills: ["React", "TypeScript", "JavaScript", "HTML5", "CSS3", "Tailwind CSS", "Vite", "Testing Library"],
     atsRequirements: ["Strong React background", "Proficient in TypeScript", "Modern CSS frameworks"],
-    interviewTopics: ["React Lifecycle", "Hooks", "State Management", "DOM manipulation", "Performance optimization"]
+    interviewTopics: ["React Lifecycle", "Hooks", "State Management", "DOM manipulation", "Performance optimization"],
+    missingSkillSuggestions: ["Next.js", "Redux", "GraphQL"],
+    strongSkillIndicators: ["Tailwind", "Vite", "Testing Library"]
   },
   {
     id: "backend-dev",
@@ -15,7 +17,9 @@ export const ROLES: Role[] = [
     keywords: ["Node.js", "Python", "PostgreSQL", "Redis", "Microservices", "Docker", "API Design", "gRPC"],
     preferredSkills: ["Node.js", "Express", "Python", "Django", "Go", "PostgreSQL", "MongoDB", "Redis", "RabbitMQ"],
     atsRequirements: ["Distributed systems knowledge", "Database optimization", "API security"],
-    interviewTopics: ["Database Indexing", "Concurrency", "System Design", "Security", "Scalability"]
+    interviewTopics: ["Database Indexing", "Concurrency", "System Design", "Security", "Scalability"],
+    missingSkillSuggestions: ["Go", "RabbitMQ", "Microservices"],
+    strongSkillIndicators: ["PostgreSQL", "Redis", "Docker"]
   },
   {
     id: "fullstack-dev",
@@ -23,7 +27,9 @@ export const ROLES: Role[] = [
     keywords: ["React", "Node.js", "TypeScript", "Full Stack", "SQL", "Cloud", "System Architecture", "DevOps"],
     preferredSkills: ["React", "Node.js", "TypeScript", "PostgreSQL", "Next.js", "Prisma", "AWS", "CI/CD"],
     atsRequirements: ["End-to-end development", "Frontend and Backend proficiency", "Database management"],
-    interviewTopics: ["Client-server architecture", "Data modeling", "Full-stack debugging", "Auth flows"]
+    interviewTopics: ["Client-server architecture", "Data modeling", "Full-stack debugging", "Auth flows"],
+    missingSkillSuggestions: ["AWS", "CI/CD", "Next.js"],
+    strongSkillIndicators: ["TypeScript", "PostgreSQL", "Prisma"]
   },
   {
     id: "cybersecurity-analyst",
@@ -31,7 +37,9 @@ export const ROLES: Role[] = [
     keywords: ["SIEM", "SOC", "Incident Response", "Threat Hunting", "Splunk", "NIST", "OWASP", "Network Security"],
     preferredSkills: ["SIEM", "Splunk", "Wireshark", "Firewalls", "IDS/IPS", "Vulnerability Scanning", "Penetration Testing"],
     atsRequirements: ["Security framework knowledge", "Incident handling experience", "Network protocols"],
-    interviewTopics: ["TCP/IP", "Common attacks (SQLi, XSS)", "Encryption", "SOC workflows", "Forensics"]
+    interviewTopics: ["TCP/IP", "Common attacks (SQLi, XSS)", "Encryption", "SOC workflows", "Forensics"],
+    missingSkillSuggestions: ["SIEM", "Splunk", "Wireshark"],
+    strongSkillIndicators: ["Firewalls", "IDS/IPS", "Vulnerability Scanning"]
   },
   {
     id: "soc-analyst",
@@ -39,7 +47,9 @@ export const ROLES: Role[] = [
     keywords: ["Log Analysis", "Alert Monitoring", "SOC", "EDR", "Splunk", "CrowdStrike", "Threat Intel", "SIEM"],
     preferredSkills: ["Splunk", "QRadar", "CrowdStrike", "Wireshark", "Phishing Analysis", "Packet Analysis"],
     atsRequirements: ["Monitoring tools proficiency", "Fast response times", "Detail-oriented analysis"],
-    interviewTopics: ["Log sources", "Triage process", "Network layers", "Incident classification"]
+    interviewTopics: ["Log sources", "Triage process", "Network layers", "Incident classification"],
+    missingSkillSuggestions: ["CrowdStrike", "QRadar", "Phishing Analysis"],
+    strongSkillIndicators: ["Splunk", "Wireshark", "Log Analysis"]
   },
   {
     id: "devops-engineer",
@@ -47,7 +57,9 @@ export const ROLES: Role[] = [
     keywords: ["Kubernetes", "Docker", "Terraform", "CI/CD", "AWS", "Infrastructure as Code", "Monitoring", "Automation"],
     preferredSkills: ["Kubernetes", "Docker", "Terraform", "Ansible", "Jenkins", "GitHub Actions", "Prometheus", "Grafana"],
     atsRequirements: ["Cloud platform certification", "Container orchestration", "IaC expertise"],
-    interviewTopics: ["Pipeline design", "Infrastructure scaling", "Container security", "Observability"]
+    interviewTopics: ["Pipeline design", "Infrastructure scaling", "Container security", "Observability"],
+    missingSkillSuggestions: ["Kubernetes", "Terraform", "Prometheus"],
+    strongSkillIndicators: ["Docker", "Ansible", "Jenkins"]
   },
   {
     id: "data-analyst",
@@ -55,7 +67,9 @@ export const ROLES: Role[] = [
     keywords: ["SQL", "Python", "Tableau", "Power BI", "Data Visualization", "Statistics", "ETL", "Excel"],
     preferredSkills: ["SQL", "Python", "Tableau", "Power BI", "Pandas", "NumPy", "Data Cleaning", "A/B Testing"],
     atsRequirements: ["Data storytelling", "Statistical analysis", "Advanced SQL"],
-    interviewTopics: ["Joins", "Aggregations", "Data cleaning techniques", "Visualization principles"]
+    interviewTopics: ["Joins", "Aggregations", "Data cleaning techniques", "Visualization principles"],
+    missingSkillSuggestions: ["Tableau", "Power BI", "A/B Testing"],
+    strongSkillIndicators: ["SQL", "Python", "Pandas"]
   },
   {
     id: "ai-engineer",
@@ -63,7 +77,9 @@ export const ROLES: Role[] = [
     keywords: ["Machine Learning", "PyTorch", "NLP", "LLM", "Deep Learning", "Transformers", "Computer Vision", "MLOps"],
     preferredSkills: ["PyTorch", "TensorFlow", "NLP", "LangChain", "OpenAI", "HuggingFace", "Python", "Model Deployment"],
     atsRequirements: ["Deep learning experience", "Model evaluation metrics", "Large language models"],
-    interviewTopics: ["Gradient Descent", "Neural Network architectures", "LLM Fine-tuning", "Vector Databases"]
+    interviewTopics: ["Gradient Descent", "Neural Network architectures", "LLM Fine-tuning", "Vector Databases"],
+    missingSkillSuggestions: ["LangChain", "OpenAI", "Model Deployment"],
+    strongSkillIndicators: ["PyTorch", "TensorFlow", "Python"]
   },
   {
     id: "uiux-designer",
@@ -71,6 +87,18 @@ export const ROLES: Role[] = [
     keywords: ["Figma", "Design Systems", "User Research", "Wireframing", "Prototyping", "Visual Design", "Accessibility"],
     preferredSkills: ["Figma", "Sketch", "Adobe Creative Suite", "User Personas", "Usability Testing", "Interaction Design"],
     atsRequirements: ["Portfolio availability", "User-centric design approach", "Prototyping skills"],
-    interviewTopics: ["Design process", "Accessibility (WCAG)", "Usability principles", "Critique and iteration"]
+    interviewTopics: ["Design process", "Accessibility (WCAG)", "Usability principles", "Critique and iteration"],
+    missingSkillSuggestions: ["Design Systems", "Usability Testing", "Interaction Design"],
+    strongSkillIndicators: ["Figma", "Sketch", "User Research"]
+  },
+  {
+    id: "project-manager",
+    title: "Project Manager",
+    keywords: ["Agile", "Scrum", "Risk Management", "Stakeholder Management", "SDLC", "Budgeting", "Roadmap", "PMP"],
+    preferredSkills: ["Jira", "Confluence", "Microsoft Project", "Trello", "Agile Methodologies", "Scrum", "Prince2", "Lean"],
+    atsRequirements: ["Project lifecycle management", "Cross-functional leadership", "Agile certification"],
+    interviewTopics: ["Conflict resolution", "Agile vs Waterfall", "Risk mitigation", "Stakeholder communication"],
+    missingSkillSuggestions: ["Risk Management", "Stakeholder Management", "Budgeting"],
+    strongSkillIndicators: ["Jira", "Confluence", "Agile Methodologies"]
   }
 ];

@@ -57,6 +57,7 @@ export interface ATSResult {
     experienceQuality: ScoreComponent;
     projectsQuality: ScoreComponent;
     formatting: ScoreComponent;
+    readability: ScoreComponent;
     certifications: ScoreComponent;
     keywordMatch: ScoreComponent;
   };
@@ -89,4 +90,6 @@ export interface Role {
   preferredSkills: string[];
   atsRequirements: string[];
   interviewTopics: string[];
+  missingSkillSuggestions: string[];
+  strongSkillIndicators: string[];
 }

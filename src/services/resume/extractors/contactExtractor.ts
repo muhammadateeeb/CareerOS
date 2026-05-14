@@ -54,5 +54,15 @@ export function extractContactInfo(text: string): PersonalInfo {
   const githubMatch = text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_-]+\/?/i);
   if (githubMatch) info.github = githubMatch[0];
 
+  // Portfolio / Website
+  const portfolioMatch = text.match(/(?:https?:\/\/)?(?:www\.)?([A-Za-z0-9_-]+\.me|[A-Za-z0-9_-]+\.com\/portfolio|[A-Za-z0-9_-]+\.github\.io)\/?/i);
+  if (portfolioMatch) info.website = portfolioMatch[0];
+
+  // Location
+  const locationMatch = text.match(/\b([A-Z][a-z]+(?: [A-Z][a-z]+)*, [A-Z]{2,}|[A-Z][a-z]+(?: [A-Z][a-z]+)*, [A-Z][a-z]+(?: [A-Z][a-z]+)*)\b/);
+  if (locationMatch && !info.name?.includes(locationMatch[0])) {
+    info.location = locationMatch[0];
+  }
+
   return info;
 }

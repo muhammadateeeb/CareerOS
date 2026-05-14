@@ -17,8 +17,8 @@ import { useDashboardStore, dashboardActions } from "@/store/dashboardStore";
 import { useOnboardingStore }                  from "@/store/onboardingStore";
 
 import { validateResumeFile, formatFileSize } from "@/services/resumeParser";
-import { parsePDF } from "@/services/resume/parser/pdfParser";
-import { parseDOCX } from "@/services/resume/parser/docxParser";
+import { runParserPipeline } from "@/services/resume/parser/parserPipeline";
+import { detectSections } from "@/services/resume/parser/sectionEngine";
 import { sanitizeResumeText } from "@/services/resume/parser/sanitize";
 import { extractContactInfo } from "@/services/resume/extractors/contactExtractor";
 import { extractSkills } from "@/services/resume/extractors/skillsExtractor";
@@ -141,7 +141,7 @@ function ComponentBar({ label, score, max, detail }: {
 // ─── Upload zone ──────────────────────────────────────────────────────────────
 
 interface UploadZoneProps {
-  onResult: (parsed: ParsedResume, ats: ATSResult, fileName: string, fileSize: number) => void;
+  onResult: (parsed: ParsedResume, ats: ATSResult, fileName: string, fileSize: number, parserUsed: string, qualityScore: number) => void;
 }
 
 function UploadZone({ onResult }: UploadZoneProps) {
@@ -168,27 +168,19 @@ function UploadZone({ onResult }: UploadZoneProps) {
     setProgress(15);
 
     try {
-      // ── Extract raw text ──────────────────────────────────────────────
-      let rawText = "";
-      const extension = file.name.split(".").pop()?.toLowerCase();
-
-      if (extension === "pdf") {
-        rawText = await parsePDF(file);
-      } else if (extension === "docx") {
-        rawText = await parseDOCX(file);
-      } else if (extension === "txt") {
-        rawText = await file.text();
-      } else {
-        throw new Error("Unsupported file type. Please use PDF, DOCX, or TXT.");
-      }
+      // ── Multi-Layer Parser Pipeline ───────────────────────────────────
+      const rawText = await runParserPipeline(file);
 
       setProgress(45);
       setStage("parsing");
 
-      // ── Clean the raw text ────────────────────────────────────────────
+      // ── Deep Sanitization ────────────────────────────────────────────
       const cleanText = sanitizeResumeText(rawText);
 
-      // ── Structured parse (new engine) ─────────────────────────────────
+      // ── Structural Section Detection ──────────────────────────────────
+      const sections = detectSections(cleanText);
+
+      // ── Structured extraction ────────────────────────────────────────
       const personalInfo = extractContactInfo(cleanText);
       const skills = extractSkills(cleanText);
       const experience = extractExperience(cleanText);
@@ -210,7 +202,7 @@ function UploadZone({ onResult }: UploadZoneProps) {
       setProgress(70);
       setStage("scoring");
 
-      // ── ATS score ─────────────────────────────────────────────────────
+      // ── Enterprise ATS & Role Matching ───────────────────────────────
       const targetTitle = profile.targetRole || onboarding?.targetRole || "";
       const targetRole = ROLES.find(r => r.title === targetTitle) || ROLES[0];
 
@@ -235,7 +227,7 @@ function UploadZone({ onResult }: UploadZoneProps) {
       }));
 
       setProgress(100);
-      onResult(parsed, atsResult, file.name, file.size);
+      onResult(parsed, atsResult, file.name, file.size, "Pipeline (Multi-Layer)", 95);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -635,7 +627,7 @@ function ParsedDataPanel({ parsed }: { parsed: ParsedResume }) {
 
 function DebugPanel({ onLoad, result }: {
   onLoad: (text: string) => void;
-  result?: { parsed: ParsedResume; ats: ATSResult };
+  result?: { parsed: ParsedResume; ats: ATSResult; parserUsed?: string; qualityScore?: number };
 }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
@@ -698,6 +690,8 @@ function DebugPanel({ onLoad, result }: {
                   <p className="font-bold mb-1">Text Stats</p>
                   <p>Raw: {result.parsed.rawText.length} chars</p>
                   <p>Clean: {result.parsed.sanitizedText.length} chars</p>
+                  <p>Parser: {result.parserUsed}</p>
+                  <p>Quality: {result.qualityScore}%</p>
                 </div>
                 <div className="bg-white p-2 rounded border border-amber-200">
                   <p className="font-bold mb-1">Extraction</p>
@@ -732,6 +726,8 @@ function ResumeLabPage() {
     ats:      ATSResult;
     fileName: string;
     fileSize: number;
+    parserUsed?: string;
+    qualityScore?: number;
   } | null>(null);
 
   const isDev = import.meta.env.DEV;
@@ -749,9 +745,9 @@ function ResumeLabPage() {
   );
 
   const handleResult = useCallback((
-    parsed: ParsedResume, ats: ATSResult, fileName: string, fileSize: number
+    parsed: ParsedResume, ats: ATSResult, fileName: string, fileSize: number, parserUsed: string, qualityScore: number
   ) => {
-    setResult({ parsed, ats, fileName, fileSize });
+    setResult({ parsed, ats, fileName, fileSize, parserUsed, qualityScore });
   }, []);
 
   // Debug: run analysis directly on raw text (no file upload)
@@ -780,7 +776,7 @@ function ResumeLabPage() {
     const targetRole = ROLES.find(r => r.title === targetTitle) || ROLES[0];
 
     const ats = calculateATSScore(parsed, targetRole);
-    setResult({ parsed, ats, fileName: "debug-input.txt", fileSize: text.length });
+    setResult({ parsed, ats, fileName: "debug-input.txt", fileSize: text.length, parserUsed: "Debug Text", qualityScore: 100 });
   }, [profile, onboarding]);
 
   return (

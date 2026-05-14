@@ -1,39 +1,43 @@
 /**
- * Sanitizes resume text by removing binary noise and PDF artifacts.
+ * Enterprise-grade sanitization for resume text.
  */
 export function sanitizeResumeText(text: string): string {
   if (!text) return "";
 
   let clean = text;
 
-  // Remove common PDF binary artifacts
-  const pdfBinaryPatterns = [
+  // 1. Remove PDF Garbage & Internal Syntax
+  const garbagePatterns = [
     /%PDF.*/g,
-    /obj\s*<<.*>>\s*endobj/gs,
-    /xref\s*\d+\s*\d+\s*0000000000\s*65535\s*f.*/gs,
-    /trailer\s*<<.*>>\s*startxref\s*\d+\s*%%EOF/gs,
-    /stream.*endstream/gs,
+    /\bobj\b.*?\bendobj\b/gs,
+    /\bstream\b.*?\bendstream\b/gs,
+    /xref\s*\d+\s*\d+.*?trailer/gs,
+    /startxref\s*\d+\s*%%EOF/g,
     /<<[^>]*>>/g,
-    /\bobj\b/g,
-    /\bendobj\b/g,
-    /\bxref\b/g,
-    /\btrailer\b/g,
+    /\[\d+\s+\d+\s+R\]/g, // PDF Reference
+    /(\/Type|\/Page|\/Contents|\/Parent|\/Resources|\/Font)/g,
   ];
 
-  pdfBinaryPatterns.forEach(pattern => {
-    clean = clean.replace(pattern, "");
+  garbagePatterns.forEach(pattern => {
+    clean = clean.replace(pattern, " ");
   });
 
-  // Remove null bytes and corrupted symbols
-  clean = clean.replace(/\x00/g, "");
-  clean = clean.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "");
+  // 2. Remove binary unicode junk and non-printable chars
+  clean = clean.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\uFFFD]/g, "");
 
-  // Remove repeated symbol noise (e.g., "#######", "-------")
-  clean = clean.replace(/([!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?])\1{4,}/g, " ");
+  // 3. Normalize Whitespace & Line breaks
+  clean = clean.replace(/\r\n/g, "\n");
+  clean = clean.replace(/[ \t]+/g, " ");
 
-  // Normalize whitespace
-  clean = clean.replace(/\s+/g, " ");
-  clean = clean.trim();
+  // 4. Remove numeric garbage (long strings of random numbers)
+  clean = clean.replace(/\b\d{10,}\b/g, " ");
 
-  return clean;
+  // 5. Remove repeated symbol noise
+  clean = clean.replace(/([!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?])\1{3,}/g, " ");
+
+  // 6. Preserve readable structure: ensure headings have clear separation
+  // (We'll do this by collapsing multiple newlines but keeping double for sections)
+  clean = clean.replace(/\n{3,}/g, "\n\n");
+
+  return clean.trim();
 }
