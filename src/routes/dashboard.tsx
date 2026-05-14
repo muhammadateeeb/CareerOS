@@ -43,7 +43,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect } from "react";
 import { ProfileService } from "@/services/profileService";
 import { findMatchingJobs, generateJobRecommendations } from "@/services/jobMatcher";
-import { calculateATSScore, getATSCategory, getATSCategoryColor } from "@/services/atsService";
+import { calculateATSScore, getATSCategory, getATSCategoryColor } from "@/lib/resume/atsEngine";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
